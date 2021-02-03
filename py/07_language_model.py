@@ -275,3 +275,86 @@ plt.xlabel('Epoch')
 plt.legend()
 
 plt.show()
+
+#Inference
+# 모델 생성
+model = build_model(len(vocab), d_model, n_seq)
+# train weight로 초기화
+model.load_weights(os.path.join(kowiki_dir, 'lm.hdf5'))
+
+def do_next(vocab, model, n_seq, string):
+    """
+    다음단어 예측
+    :param vocab: vocab
+    :param model: model
+    :param n_seq: number of seqence
+    :param string: inpust string
+    """
+    n_max = n_seq - 1
+    
+    tokens = vocab.encode_as_pieces(string)
+    start_idx = len(tokens)
+    token_id = [vocab.piece_to_id(p) for p in tokens][:n_max]
+    token_id = [vocab.bos_id()] + token_id
+    token_id += [0] * (n_seq - len(token_id))
+    assert len(token_id) == n_seq
+
+    result = model.predict(np.array([token_id]))
+    prob = result[0][start_idx]
+    max_args = np.argsort(prob)[-10:]
+    max_args = list(max_args)
+    max_args.reverse()
+
+    next_prob = []
+    for i in max_args:
+        w = vocab.id_to_piece(int(i))
+        p = prob[i]
+        next_prob.append((w, p))
+    return next_prob
+
+while True:
+    string = input('시작 문장 > ')
+    string = string.strip()
+    if len(string) == 0:
+        break
+    next_prob = do_next(vocab, model, n_seq, string)
+    for w, p in next_prob:
+        print(f'{w}: {p}')
+    print()
+
+def do_generate(vocab, model, n_seq, string):
+    """
+    문장생성
+    :param vocab: vocab
+    :param model: model
+    :param n_seq: number of seqence
+    :param string: inpust string
+    """
+    n_max = n_seq - 1
+    tokens = vocab.encode_as_pieces(string)
+    start_idx = len(tokens)
+    token_id = [vocab.piece_to_id(p) for p in tokens][:n_max]
+    token_id = [vocab.bos_id()] + token_id
+    token_id += [0] * (n_seq - len(token_id))
+    assert len(token_id) == n_seq
+
+    for _ in range(start_idx, n_seq - 1):
+        outputs = model.predict(np.array([token_id]))
+        prob = outputs[0][start_idx]
+        word_id = int(np.random.choice(len(vocab), 1, p=prob)[0])
+        # word_id = np.argmax(prob)
+        if word_id == vocab.eos_id():
+            break
+        token_id[start_idx + 1] = word_id
+        start_idx += 1
+    predict_id = token_id[1:start_idx + 1]
+    predict_str = vocab.decode_ids(predict_id)
+    return predict_str
+
+while True:
+    string = input('시작 문장 > ')
+    string = string.strip()
+    if len(string) == 0:
+        break
+    predict_str = do_generate(vocab, model, n_seq, string)
+    print(predict_str)
