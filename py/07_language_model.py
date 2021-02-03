@@ -66,6 +66,99 @@ def build_model(n_vocab, d_model, n_seq):
     model = tf.keras.Model(inputs=inputs, outputs=outputs)
     return model
 
+# Preprocessing
+# 파일 내용 확인
+with zipfile.ZipFile(os.path.join(kowiki_dir, 'kowiki.txt.zip')) as z:
+    with z.open('kowiki.txt') as f:
+        for i, line in enumerate(f):
+            line = line.decode('utf-8').strip()
+            print(line)
+            if i >= 100:
+                break
+
+# 파일 내용 확인 (주제단위)
+with zipfile.ZipFile(os.path.join(kowiki_dir, 'kowiki.txt.zip')) as z:
+    with z.open('kowiki.txt') as f:
+        doc = []
+        for i, line in enumerate(f):
+            line = line.decode('utf-8').strip()
+            if len(line) == 0:
+                if len(doc) > 0:
+                    break
+            else:
+                doc.append(line)
+print(doc)
+
+def create_train_instance(vocab, n_seq, doc):
+    """
+    create train instance
+    :param vocab: vocabulary object
+    :param n_seq: sequece number
+    :param doc: wiki document
+    :return: train instance list
+    """
+    n_max = n_seq - 1
+    instance_list = []
+
+    chunk = []
+    chunk_len = 0
+    for i, line in enumerate(doc):
+        tokens = vocab.encode_as_pieces(line)
+        chunk.append(tokens)
+        chunk_len += len(tokens)
+        if n_max <= chunk_len or i >= len(doc) -1:
+            # print()
+            # print(chunk_len, chunk)
+            instance = []
+            for tokens in chunk:
+                instance.extend(tokens)
+            # print(len(instance), instance)
+            instance = instance[:n_max]
+            # print(len(instance), instance)
+            instance_list.append(instance)
+            chunk = []
+            chunk_len = 0
+
+    return instance_list
+
+# instance 동작 확인
+instance_list = create_train_instance(vocab, n_seq, doc)
+for instance in instance_list:
+    print(len(instance), instance)
+
+# instance를 json 형태로 저장하는 함수
+def save_instance(vocab, n_seq, doc, o_f):
+    instance_list = create_train_instance(vocab, n_seq, doc)
+    for instance in instance_list:
+        o_f.write(json.dumps({'token': instance}, ensure_ascii=False))
+        o_f.write('\n')
+
+# 전체 문서에 대한 instance 생성
+with open(os.path.join(kowiki_dir, 'kowiki_lm.json'), 'w') as o_f:
+    with zipfile.ZipFile(os.path.join(kowiki_dir, 'kowiki.txt.zip')) as z:
+        with z.open('kowiki.txt') as f:
+            doc = []
+            for i, line in enumerate(tqdm(f)):
+                line = line.decode('utf-8').strip()
+                if len(line) == 0:
+                    if len(doc) > 0:
+                        save_instance(vocab, n_seq, doc, o_f)
+                        doc = []
+                else:
+                    doc.append(line)
+            if len(doc) > 0:
+                save_instance(vocab, n_seq, doc, o_f)
+
+# 파일 라인수 확인
+n_line = 0
+with open(os.path.join(kowiki_dir, 'kowiki_lm.json')) as f:
+    for line in f:
+        n_line += 1
+        if n_line <= 10:
+            print(line)
+print(n_line)
+
+
 ## Data
 def load_data(vocab, n_seq):
     """
